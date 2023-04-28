@@ -1,0 +1,145 @@
+---
+title: "Group_project_HXD220000_MXB220061_KXV220007_MXS220057"
+output: html_document
+date: "`r Sys.Date()`"
+---
+
+```{r}
+require(data.table)
+require(tidyverse)
+require(partykit)
+require(psych)
+require(caret)
+require(pROC)
+
+```
+
+```{r}
+
+data <- fread("heart.csv",stringsAsFactors = T)
+str(data)
+describe(data)
+
+```
+
+```{r}
+
+require(ggplot2)
+require(GGally)
+ggpairs(data)
+#ggsave("ggpairs_data.png", width = 10, height = 10, dpi = 300,limitsize = FALSE)
+
+```
+
+```{r}
+data[,HeartDisease:=as.factor(HeartDisease)]
+ggpairs(data,column=1:11,ggplot2::aes(colour=HeartDisease))
+#ggsave("ggpairs_hd_data.png", width = 10, height = 10, dpi = 300,limitsize = FALSE)
+#dev.off()
+```
+
+```{r}
+na <- is.na(data)
+all(na == T)
+```
+
+```{r}
+data_desc <- describe(data,IQR = TRUE)
+data_desc
+data_hd_desc <- describeBy(data,data$HeartDisease,IQR = TRUE)
+data_hd_desc
+
+```
+
+```{r}
+
+barplot(table(data$Sex), main = "Sex Distribution Plot")
+barplot(table(data$ChestPainType), main = "Chest Distribution Plot")
+barplot(table(data$FastingBS), main = "FastingBS Distribution Plot")
+barplot(table(data$ExerciseAngina), main = "ExerciseAngina Distribution Plot")
+barplot(table(data$ST_Slope), main = "ST_Slope Distribution Plot")
+barplot(table(data$HeartDisease), main = "Heart Disease Distribution Plot")
+
+```
+
+```{r}
+
+hist(data$Age,xlab = "Age",main = "Histogram of Age")
+hist(data$RestingBP,xlab = "RestingBP",main = "Histogram of RestingBP")
+hist(data$Cholesterol,xlab = "Cholesterol",main = "Histogram of Cholesterol")
+hist(data$Cholesterol,xlab = "Cholesterol",main = "Histogram of Cholesterol")
+hist(data$Oldpeak,xlab = "Oldpeak",main = "Histogram of Oldpeak")
+
+require(car)
+qqPlot(data$Age,xlab = "Age",main = "Histogram of Age")
+qqPlot(data$RestingBP,xlab = "RestingBP",main = "Histogram of RestingBP")
+qqPlot(data$Cholesterol,xlab = "Cholesterol",main = "Histogram of Cholesterol")
+qqPlot(data$Cholesterol,xlab = "Cholesterol",main = "Histogram of Cholesterol")
+qqPlot(data$Oldpeak,xlab = "Oldpeak",main = "Histogram of Oldpeak")
+
+
+```
+
+```{r}
+
+pie(table(data$HeartDisease),labels = names(data$HeartDisease),main = "Heart Disease")
+
+barplot(table(data$HeartDisease),main = "Heart Disease")
+
+```
+
+Creating test train splits
+
+```{r}
+seed    <- 504737137
+set.seed(seed)
+n <- nrow(data)
+frac <- 0.2
+tst <- sample(n,ceiling(frac*n))
+train <- data[-tst,]
+test <- data[tst,]
+
+```
+
+
+Model selection
+
+```{r}
+fmla <- HeartDisease~.
+```
+
+```{r}
+error_eval      <- function(lbl,v) { 
+               sse <- sum(v^2)
+               mse <- sse/length(v)
+               return(data.table(lbl=lbl,sse=sse,mse=mse,rmse=sqrt(mse))) }
+
+model_eval <- function(model,pred,test){
+  #roc <- roc(pred,test)
+  #pred <- prediction(model,test)
+  #perf <- performance(pred, "tpr", "fpr")
+  #graph <- plot(perf, main = "ROC Curve", colorize = TRUE)
+  acc <- caret::confusionMatrix(pred,test)
+  return(list(acc=acc))
+}
+```
+
+Random forest 
+
+```{r}
+require(randomForest)
+rfModel      <- randomForest(fmla,train,ntree=500)
+summary(rfModel)
+print(rfModel)
+rfModel$localImportance
+getTree(rfModel,labelVar = F)
+rfPred <- predict(rfModel,test,type = "prob")
+require(ROCR)
+perf=prediction(rfPred[,2], test$HeartDisease)
+auc = performance(perf, "auc")
+pred3 = performance(perf, "tpr","fpr") 
+rfPred <- predict(rfModel,test)
+plot(pred3,main="ROC Curve for Random Forest",col=2,lwd=2)
+cm.rf <- table(rfPred,test$HeartDisease,dnn=c("Classified","Actual"))
+sum(diag(cm.rf))/sum(cm.rf)
+```
